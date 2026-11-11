@@ -11,8 +11,8 @@ export interface RefineSettings {
 /** 預設行情 */
 export const DEFAULT_SETTINGS: RefineSettings = {
   equipment: 'weapon5',
-  start: 7,
-  end: 12,
+  start: 0,
+  end: 9,
   prices: {
     materials: {
       Etherdeocon: 75_000,
