@@ -1,4 +1,5 @@
-// 精煉資料：沿用 https://vkmouse.github.io/simulate-refining/ (2022.09.08) 的成功率表與材料規則。
+// 精煉資料：沿用 https://vkmouse.github.io/simulate-refining/ (2022.09.08) 的成功率表與材料規則，
+// 並已對照官方 https://ro.gnjoy.com.tw/Notice/Guide_View?id=216542 的二級防具／五級武器表格。
 // 只收錄武器等級 5、防具等級 2，精煉範圍 +0 ~ +14。
 
 export const MAX_LEVEL = 14
@@ -49,7 +50,7 @@ export const EQUIPMENTS: Record<EquipmentId, Equipment> = {
     name: '武器等級 5',
     materials: [
       { id: 'Etherdeocon', name: '乙太神之金屬', category: 'normal', penalty: { kind: 'down', levels: 3 }, from: 0, to: 9 },
-      { id: 'EnrichedEtherdeocon', name: '濃縮乙太神之金屬', category: 'special', penalty: { kind: 'down', levels: 1 }, from: 0, to: 9 },
+      { id: 'EnrichedEtherdeocon', name: '濃縮乙太神之金屬', category: 'special', penalty: { kind: 'down', levels: 1 }, from: 3, to: 9 },
       { id: 'HDEtherdeocon', name: '高濃縮乙太神之金屬', category: 'special', penalty: { kind: 'break' }, from: 10, to: 13 },
     ],
   },
@@ -58,7 +59,7 @@ export const EQUIPMENTS: Record<EquipmentId, Equipment> = {
     name: '防具等級 2',
     materials: [
       { id: 'Etherium', name: '乙太鋁', category: 'normal', penalty: { kind: 'down', levels: 3 }, from: 0, to: 9 },
-      { id: 'EnrichedEthernium', name: '濃縮乙太鋁', category: 'special', penalty: { kind: 'down', levels: 1 }, from: 0, to: 9 },
+      { id: 'EnrichedEthernium', name: '濃縮乙太鋁', category: 'special', penalty: { kind: 'down', levels: 1 }, from: 3, to: 9 },
       { id: 'HDEthernium', name: '高濃縮乙太鋁', category: 'special', penalty: { kind: 'break' }, from: 10, to: 13 },
     ],
   },
