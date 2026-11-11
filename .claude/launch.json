@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pages-preview",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["preview", "--base", "/ro-toolbox/", "--port", "4173", "--strictPort"],
+      "port": 4173
+    },
+    {
+      "name": "dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}
