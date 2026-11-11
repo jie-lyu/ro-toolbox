@@ -5,14 +5,19 @@ export interface RefineSettings {
   equipment: EquipmentId
   start: number
   end: number
+  /** 可接受比最省錢多花的百分比（0 ~ MAX_SLACK_PERCENT） */
+  slackPercent: number
   prices: Prices
 }
+
+export const MAX_SLACK_PERCENT = 30
 
 /** 預設行情 */
 export const DEFAULT_SETTINGS: RefineSettings = {
   equipment: 'weapon5',
   start: 0,
   end: 9,
+  slackPercent: 0,
   prices: {
     materials: {
       Etherdeocon: 75_000,
@@ -37,10 +42,15 @@ function load(): RefineSettings {
     const start = Number.isInteger(saved.start) ? saved.start! : DEFAULT_SETTINGS.start
     const end = Number.isInteger(saved.end) ? saved.end! : DEFAULT_SETTINGS.end
     const validRange = 0 <= start && start < end && end <= MAX_LEVEL
+    const slackPercent =
+      Number.isInteger(saved.slackPercent) && saved.slackPercent! >= 0 && saved.slackPercent! <= MAX_SLACK_PERCENT
+        ? saved.slackPercent!
+        : DEFAULT_SETTINGS.slackPercent
     return {
       equipment,
       start: validRange ? start : DEFAULT_SETTINGS.start,
       end: validRange ? end : DEFAULT_SETTINGS.end,
+      slackPercent,
       prices: {
         blessing: saved.prices?.blessing ?? DEFAULT_SETTINGS.prices.blessing,
         materials: { ...DEFAULT_SETTINGS.prices.materials, ...saved.prices?.materials },

@@ -106,3 +106,46 @@ describe.each(Object.values(EQUIPMENTS))('$name', (equipment) => {
     expect(Math.abs(mean - plan.totalCost)).toBeLessThan(4 * se)
   })
 })
+
+describe.each(Object.values(EQUIPMENTS))('可接受多花 · $name', (equipment) => {
+  const ranges = [[0, 10], [5, 12], [7, 14], [3, 9]] as const
+  const slacks = [0, 0.05, 0.1, 0.3]
+
+  it('與獨立窮舉的結果一致：預算內次數最少', () => {
+    for (const [start, end] of ranges) {
+      const levelOptions = Array.from({ length: end }, (_, i) => optionsAt(equipment, i, prices))
+      // allPolicies 每次 yield 同一個陣列，必須在迴圈內當場計算
+      const all: { cost: number; attempts: number }[] = []
+      for (const policy of allPolicies(levelOptions)) {
+        all.push({ cost: solveLinear(policy, start, end), attempts: expectedTotal(policy, start, end, () => 1) })
+      }
+      const minCost = Math.min(...all.map((p) => p.cost))
+      for (const slack of slacks) {
+        const plan = optimizePlan(equipment, prices, start, end, slack)
+        const feasible = all.filter((p) => p.cost <= minCost * (1 + slack) * (1 + 1e-9))
+        const minAttempts = Math.min(...feasible.map((p) => p.attempts))
+        relClose(plan.cheapest.totalCost, minCost)
+        relClose(plan.totalAttempts, minAttempts)
+        expect(plan.totalCost).toBeLessThanOrEqual(minCost * (1 + slack) * (1 + 1e-9))
+      }
+    }
+  })
+
+  it('多花的比例越高，次數不會變多、花費不會變少', () => {
+    for (const [start, end] of ranges) {
+      const plans = slacks.map((s) => optimizePlan(equipment, prices, start, end, s))
+      for (let k = 1; k < plans.length; k++) {
+        expect(plans[k].totalAttempts).toBeLessThanOrEqual(plans[k - 1].totalAttempts * (1 + 1e-9))
+        expect(plans[k].totalCost).toBeGreaterThanOrEqual(plans[k - 1].totalCost * (1 - 1e-9))
+      }
+    }
+  })
+
+  it('每一級的升級花費與次數加總等於總計', () => {
+    const plan = optimizePlan(equipment, prices, 4, 12, 0.1)
+    const above = plan.steps.filter((s) => !s.belowStart)
+    relClose(above.reduce((s, x) => s + x.choice.costToNext, 0), plan.totalCost)
+    relClose(above.reduce((s, x) => s + x.choice.attemptsToNext, 0), plan.totalAttempts)
+    relClose(plan.steps.reduce((s, x) => s + x.expectedAttempts, 0), plan.totalAttempts)
+  })
+})

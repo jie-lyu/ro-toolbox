@@ -9,17 +9,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
 import { type EquipmentId, EQUIPMENTS, MAX_LEVEL, type Material, REFINE_FEE, type RefineOption } from './data'
-import { formatCount, formatPercent, formatZeny } from './format'
+import { formatCount, formatPercent, formatSignedCount, formatSignedZeny, formatZeny } from './format'
 import { type RefinePlan, optimizePlan } from './optimizer'
 import { PriceInput } from './price-input'
-import { DEFAULT_SETTINGS, useRefineSettings } from './use-refine-settings'
+import { DEFAULT_SETTINGS, MAX_SLACK_PERCENT, useRefineSettings } from './use-refine-settings'
 
 export function RefinePage() {
   const [settings, setSettings] = useRefineSettings()
   const equipment = EQUIPMENTS[settings.equipment]
   const plan = useMemo(
-    () => optimizePlan(equipment, settings.prices, settings.start, settings.end),
-    [equipment, settings.prices, settings.start, settings.end],
+    () => optimizePlan(equipment, settings.prices, settings.start, settings.end, settings.slackPercent / 100),
+    [equipment, settings.prices, settings.start, settings.end, settings.slackPercent],
   )
 
   useEffect(() => {
@@ -35,7 +35,9 @@ export function RefinePage() {
       <div className="grid content-start gap-4">
         <div>
           <h1 className="text-xl font-semibold">精煉</h1>
-          <p className="text-sm text-muted-foreground">依材料行情找出最省錢的精煉做法，只考慮失敗不會爆裝的選項。</p>
+          <p className="text-sm text-muted-foreground">
+            依材料行情找出最省錢的精煉做法，也可以多花一點換更少的精煉次數。只考慮失敗不會爆裝的選項。
+          </p>
         </div>
 
         <Card>
@@ -74,11 +76,30 @@ export function RefinePage() {
                 value={[settings.start, settings.end]}
                 onValueChange={([start, end]) => setSettings((s) => ({ ...s, start, end }))}
                 aria-label="精煉範圍"
+                thumbLabels={['起點精煉值', '目標精煉值']}
               />
               <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
                 <span>+0</span>
                 <span>+{MAX_LEVEL}</span>
               </div>
+            </div>
+            <div className="grid gap-3">
+              <div className="flex items-baseline justify-between">
+                <Label>可接受多花</Label>
+                <span className="text-sm font-medium tabular-nums">
+                  {settings.slackPercent === 0 ? '0%（最省錢）' : `${settings.slackPercent}%`}
+                </span>
+              </div>
+              <Slider
+                min={0}
+                max={MAX_SLACK_PERCENT}
+                step={1}
+                value={[settings.slackPercent]}
+                onValueChange={([slackPercent]) => setSettings((s) => ({ ...s, slackPercent }))}
+                aria-label="可接受多花的百分比"
+                thumbLabels={['可接受多花的百分比']}
+              />
+              <p className="text-xs text-muted-foreground">在比最省錢多花不超過這個比例的做法中，挑平均精煉次數最少的。</p>
             </div>
           </CardContent>
         </Card>
@@ -166,24 +187,52 @@ function Summary({ plan }: { plan: RefinePlan }) {
     <Card>
       <CardHeader>
         <CardTitle>
-          +{plan.start} → +{plan.end} 最省錢做法
+          +{plan.start} → +{plan.end} {plan.slack > 0 ? `做法（可多花 ${Math.round(plan.slack * 100)}%）` : '最省錢做法'}
         </CardTitle>
         <CardDescription>
           材料 {formatZeny(materialCost)} · 祝福 {formatZeny(plan.blessingCost)} · 精煉費 {formatZeny(plan.feeCost)}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-3">
-        {tiles.map((t) => (
-          <div key={t.label} className="rounded-lg border bg-muted/40 p-3">
-            <div className="text-xs text-muted-foreground">{t.label}</div>
-            <div className="mt-1 text-2xl font-semibold tabular-nums">
-              {t.value}
-              <span className="ml-1 text-sm font-normal text-muted-foreground">{t.unit}</span>
+      <CardContent className="grid gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {tiles.map((t) => (
+            <div key={t.label} className="rounded-lg border bg-muted/40 p-3">
+              <div className="text-xs text-muted-foreground">{t.label}</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">
+                {t.value}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">{t.unit}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        {plan.slack > 0 && <SlackComparison plan={plan} />}
       </CardContent>
     </Card>
+  )
+}
+
+function SlackComparison({ plan }: { plan: RefinePlan }) {
+  const extraCost = plan.totalCost - plan.cheapest.totalCost
+  const savedAttempts = plan.cheapest.totalAttempts - plan.totalAttempts
+  if (savedAttempts < 0.005) {
+    return (
+      <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+        多花 {Math.round(plan.slack * 100)}% 以內找不到次數更少的做法，和最省錢做法相同。
+      </p>
+    )
+  }
+  return (
+    <p className="rounded-lg border border-dashed p-3 text-sm leading-relaxed">
+      比最省錢多花 <strong className="tabular-nums">{formatZeny(extraCost)}</strong>
+      <span className="text-muted-foreground tabular-nums">
+        （+{((extraCost / plan.cheapest.totalCost) * 100).toFixed(1)}%）
+      </span>
+      ，平均少敲 <strong className="tabular-nums">{formatCount(savedAttempts)}</strong> 下
+      <span className="text-muted-foreground tabular-nums">
+        （{formatCount(plan.cheapest.totalAttempts)} → {formatCount(plan.totalAttempts)}）
+      </span>
+      ，相當於每少敲一下多花 <strong className="tabular-nums">{formatZeny(extraCost / savedAttempts)}</strong> z。
+    </p>
   )
 }
 
@@ -196,14 +245,14 @@ function StepsCard({ plan }: { plan: RefinePlan }) {
     <Card>
       <CardHeader>
         <CardTitle>每一級的選擇</CardTitle>
-        <CardDescription>點一列可以比較這一級的其他做法。</CardDescription>
+        <CardDescription>點一列可以比較這一級的其他做法，以及只換這一級時整趟花費與次數的變化。</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-20">精煉值</TableHead>
-              <TableHead>最佳做法</TableHead>
+              <TableHead>採用做法</TableHead>
               <TableHead className="text-right">成功率</TableHead>
               <TableHead>失敗時</TableHead>
               <TableHead className="text-right">平均次數</TableHead>
@@ -256,7 +305,7 @@ function StepsCard({ plan }: { plan: RefinePlan }) {
                     <TableCell className="text-right tabular-nums">{formatPercent(o.probability)}</TableCell>
                     <TableCell>{failLabel(o)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatCount(step.expectedAttempts)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatZeny(step.choice.expectedCost)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatZeny(step.choice.costToNext)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {step.cumulativeCost === null ? '—' : formatZeny(step.cumulativeCost)}
                     </TableCell>
@@ -280,31 +329,57 @@ function StepsCard({ plan }: { plan: RefinePlan }) {
 }
 
 function Alternatives({ step }: { step: RefinePlan['steps'][number] }) {
-  const best = step.alternatives[0].expectedCost
+  const chosen = step.choice
   return (
     <table className="w-full text-sm">
       <thead className="text-xs text-muted-foreground">
         <tr>
           <th className="pb-1 text-left font-normal">做法</th>
-          <th className="pb-1 text-right font-normal">成功率</th>
-          <th className="pb-1 pl-4 text-left font-normal">失敗時</th>
-          <th className="pb-1 text-right font-normal">升一級期望花費</th>
-          <th className="pb-1 text-right font-normal">比最佳多</th>
+          <th className="pb-1 pl-3 text-right font-normal">成功率</th>
+          <th className="pb-1 pl-3 text-left font-normal">失敗時</th>
+          <th className="pb-1 pl-3 text-right font-normal">升一級期望花費</th>
+          <th className="pb-1 pl-3 text-right font-normal">整趟花費差</th>
+          <th className="pb-1 pl-3 text-right font-normal">整趟次數差</th>
+          <th className="pb-1 pl-3 text-right font-normal">換算</th>
         </tr>
       </thead>
       <tbody>
-        {step.alternatives.map(({ option, expectedCost }, i) => (
-          <tr key={optionLabel(option)} className={cn(i === 0 && 'font-medium')}>
-            <td className="py-0.5">{optionLabel(option)}</td>
-            <td className="py-0.5 text-right tabular-nums">{formatPercent(option.probability)}</td>
-            <td className="py-0.5 pl-4">{failLabel(option)}</td>
-            <td className="py-0.5 text-right tabular-nums">{formatZeny(expectedCost)}</td>
-            <td className="py-0.5 text-right tabular-nums">{i === 0 ? '最佳' : `+${formatZeny(expectedCost - best)}`}</td>
-          </tr>
-        ))}
+        {step.alternatives.map((alt) => {
+          const isChosen = alt.option === chosen.option
+          const dCost = alt.totalCost - chosen.totalCost
+          const dAttempts = alt.totalAttempts - chosen.totalAttempts
+          return (
+            <tr key={optionLabel(alt.option)} className={cn(isChosen && 'font-medium')}>
+              <td className="py-0.5">
+                <span className="inline-flex items-center gap-1.5">
+                  {optionLabel(alt.option)}
+                  {isChosen && <Badge variant="secondary">採用</Badge>}
+                </span>
+              </td>
+              <td className="py-0.5 pl-3 text-right tabular-nums">{formatPercent(alt.option.probability)}</td>
+              <td className="py-0.5 pl-3">{failLabel(alt.option)}</td>
+              <td className="py-0.5 pl-3 text-right tabular-nums">{formatZeny(alt.costToNext)}</td>
+              <td className="py-0.5 pl-3 text-right tabular-nums">{isChosen ? '—' : formatSignedZeny(dCost)}</td>
+              <td className="py-0.5 pl-3 text-right tabular-nums">{isChosen ? '—' : formatSignedCount(dAttempts)}</td>
+              <td className="py-0.5 pl-3 text-right text-muted-foreground tabular-nums">
+                {isChosen ? '' : tradeOffLabel(dCost, dAttempts)}
+              </td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
+}
+
+/** 換成這個做法時，每少敲一下要多花多少（或每多敲一下能省多少） */
+function tradeOffLabel(dCost: number, dAttempts: number) {
+  const fewer = dAttempts < -0.005
+  const more = dAttempts > 0.005
+  if (fewer && dCost > 0) return `每少敲一下多花 ${formatZeny(dCost / -dAttempts)}`
+  if (more && dCost < 0) return `每多敲一下省 ${formatZeny(-dCost / dAttempts)}`
+  if (dCost >= 0 && !fewer) return '較差'
+  return '較好'
 }
 
 function UsageCard({ plan, blessingPrice }: { plan: RefinePlan; blessingPrice: number }) {
